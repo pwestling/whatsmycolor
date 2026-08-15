@@ -124,6 +124,13 @@ main { overflow: hidden; }
 
 .toolbar-actions { gap: 12px; }
 
+.visitor-name-button {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .text-button,
 .icon-button {
   padding: 9px 12px;
@@ -299,7 +306,7 @@ main { overflow: hidden; }
   border: 0;
   border-radius: 1px;
   box-shadow: 0 3px 10px rgb(0 0 0 / 24%);
-  cursor: grab;
+  cursor: pointer;
   transform: translateX(-50%);
   touch-action: none;
   transition: box-shadow 160ms ease, border-color 160ms ease, filter 160ms ease;
@@ -313,7 +320,9 @@ main { overflow: hidden; }
   outline-offset: 1px;
 }
 
-.photo-card.dragging {
+.photo-card.movable { cursor: grab; }
+
+.photo-card.movable.dragging {
   z-index: 35;
   cursor: grabbing;
   border-color: var(--acid);
@@ -430,6 +439,26 @@ main { overflow: hidden; }
 
 .share-dialog::backdrop { background: rgb(8 11 8 / 76%); backdrop-filter: blur(6px); }
 
+.name-dialog {
+  width: min(400px, calc(100vw - 32px));
+  padding: 0;
+  color: var(--ink);
+  background: var(--paper);
+  border: 0;
+  border-radius: 14px;
+  box-shadow: 0 40px 100px rgb(0 0 0 / 50%);
+}
+
+.name-dialog::backdrop { background: rgb(8 11 8 / 76%); backdrop-filter: blur(6px); }
+
+.name-dialog-shell { position: relative; padding: 36px; }
+.name-dialog .atlas-title { color: var(--muted); }
+.name-dialog-shell h2 { margin: 7px 0 24px; font-family: Georgia, serif; font-size: 25px; font-weight: 400; }
+.name-dialog-shell label { display: block; margin: 0 0 8px; color: #555b52; font-size: 9px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+.name-dialog-shell input { width: 100%; min-height: 44px; padding: 0 12px; color: var(--ink); background: #faf8f2; border: 1px solid var(--line); border-radius: 7px; outline: none; }
+.name-dialog-shell input:focus { border-color: #718252; box-shadow: 0 0 0 3px rgb(113 130 82 / 13%); }
+.name-dialog-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
+
 .share-dialog-shell { position: relative; padding: 36px; }
 .share-dialog .atlas-title { color: var(--muted); }
 .share-dialog-shell h2 { margin: 7px 0 8px; font-family: Georgia, serif; font-size: 25px; font-weight: 400; }
@@ -466,12 +495,37 @@ main { overflow: hidden; }
 .dialog-content { display: flex; flex-direction: column; padding: 48px 38px 34px; }
 .dialog-content h2 { margin: 0 0 28px; font-family: Georgia, serif; font-size: 25px; font-weight: 400; }
 
+.photo-attribution {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+  margin: -18px 0 22px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.claim-button {
+  padding: 5px 10px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.claim-button:disabled { opacity: .45; cursor: default; }
+
 .dialog-content label { display: grid; gap: 8px; margin-bottom: 22px; color: #555b52; font-size: 10px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .dialog-content input:not([type="range"]) { width: 100%; min-height: 44px; padding: 0 12px; color: var(--ink); background: #faf8f2; border: 1px solid var(--line); border-radius: 7px; outline: none; }
 .dialog-content input:not([type="range"]):focus { border-color: #718252; box-shadow: 0 0 0 3px rgb(113 130 82 / 13%); }
 .dialog-content small { color: #81867e; font-size: 9px; font-weight: 500; letter-spacing: .01em; text-transform: none; }
 
 .position-control input { width: 100%; accent-color: #222; cursor: ew-resize; }
+.position-control input:disabled { cursor: default; opacity: .42; }
 .mini-spectrum { display: block; height: 8px; margin-top: -3px; background: var(--spectrum); border: 1px solid var(--line); border-radius: 99px; }
 
 .dialog-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: auto; padding-top: 20px; border-top: 1px solid var(--line); }

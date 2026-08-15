@@ -18,10 +18,12 @@ them by primary color (horizontal).
 ## Community boards
 
 `/community/<slug>` is the shared-board surface. Everyone with the URL can add
-photos, move any photo, and edit dates. Convex is the canonical metadata store
-and pushes accepted changes to every connected client over its managed realtime
-connection. Photo bytes remain in private Vercel Blob storage and are served by
-the app's media proxy.
+photos and edit dates. Each device chooses a board-local name. New photos are
+attributed to that name and can only be moved by a visitor using the same exact
+name. Older, unattributed photos are locked until a visitor claims them. Convex
+is the canonical metadata store and pushes accepted changes to every connected
+client over its managed realtime connection. Photo bytes remain in private
+Vercel Blob storage and are served by the app's media proxy.
 
 Mutations use idempotency keys and per-field versions. Conflicting moves are
 accepted atomically or returned as stale; the client rebases its pending move on

@@ -18,6 +18,7 @@ const photoFields = {
   createdAt: v.string(),
   hueVersion: v.number(),
   timeVersion: v.number(),
+  uploaderName: v.optional(v.string()),
 };
 
 export default defineSchema({

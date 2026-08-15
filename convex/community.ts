@@ -9,6 +9,7 @@ const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const PHOTO_ID_PATTERN = /^[a-f0-9]{32}$/;
 const MAX_BOARD_PHOTOS = 1_500;
 const MAX_TITLE_LENGTH = 90;
+const MAX_VISITOR_NAME_LENGTH = 40;
 const OPERATION_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
 const OPERATION_CLEANUP_BATCH = 500;
 
@@ -27,6 +28,7 @@ const photoArguments = {
   width: v.number(),
   height: v.number(),
   createdAt: v.string(),
+  uploaderName: v.optional(v.string()),
 };
 
 function requireSlug(slug: string): string {
@@ -67,6 +69,14 @@ function requirePosition(value: number): number {
     throw new ConvexError("Choose a valid color position.");
   }
   return Math.round(Math.min(100, Math.max(0, value)) * 1_000) / 1_000;
+}
+
+function requireVisitorName(value: string | undefined): string {
+  const cleaned = (value ?? "").normalize("NFKC").trim().replace(/\s+/g, " ");
+  if (!cleaned || cleaned.length > MAX_VISITOR_NAME_LENGTH) {
+    throw new ConvexError("Choose a name up to 40 characters.");
+  }
+  return cleaned;
 }
 
 function manualColor(xPosition: number): {
@@ -320,6 +330,9 @@ export const addPhoto = mutation({
       createdAt: requireIsoDate(args.createdAt),
       hueVersion: 0,
       timeVersion: 0,
+      uploaderName: args.uploaderName === undefined
+        ? ""
+        : requireVisitorName(args.uploaderName),
     };
     const id = await ctx.db.insert("photos", photoDocument);
     await ctx.db.patch(board._id, {
@@ -339,6 +352,7 @@ export const movePhoto = mutation({
     baseVersion: v.number(),
     opId: v.string(),
     clientId: v.string(),
+    visitorName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const slug = requireSlug(args.slug);
@@ -349,6 +363,12 @@ export const movePhoto = mutation({
     if (board === null) throw new ConvexError("Board not found.");
     const photo = await photoByPublicId(ctx, board._id, photoId);
     if (photo === null || !isActivePhoto(photo)) throw new ConvexError("Photo not found.");
+    const visitorName = requireVisitorName(args.visitorName);
+    const uploaderName = photo.uploaderName ?? "";
+    if (!uploaderName) throw new ConvexError("Claim this photo before moving it.");
+    if (uploaderName !== visitorName) {
+      throw new ConvexError("This photo belongs to someone else.");
+    }
     if (await hasOperation(ctx, board._id, opId)) {
       return { status: "duplicate" as const, photo };
     }
@@ -367,6 +387,41 @@ export const movePhoto = mutation({
     await recordOperation(ctx, board._id, opId, photoId, "photo.hue.set", clientId);
     const updated = await ctx.db.get(photo._id);
     return { status: "accepted" as const, photo: updated };
+  },
+});
+
+export const claimPhoto = mutation({
+  args: {
+    slug: v.string(),
+    photoId: v.string(),
+    visitorName: v.string(),
+    opId: v.string(),
+    clientId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const slug = requireSlug(args.slug);
+    const photoId = requirePhotoId(args.photoId);
+    const visitorName = requireVisitorName(args.visitorName);
+    const opId = requirePublicId(args.opId, "Could not claim that photo.");
+    const clientId = requirePublicId(args.clientId, "Could not claim that photo.");
+    const board = await boardBySlug(ctx, slug);
+    if (board === null) throw new ConvexError("Board not found.");
+    const photo = await photoByPublicId(ctx, board._id, photoId);
+    if (photo === null || !isActivePhoto(photo)) throw new ConvexError("Photo not found.");
+    const uploaderName = photo.uploaderName ?? "";
+    if (uploaderName) {
+      return {
+        status: uploaderName === visitorName ? "already-yours" as const : "taken" as const,
+        photo,
+      };
+    }
+    if (await hasOperation(ctx, board._id, opId)) {
+      return { status: "duplicate" as const, photo };
+    }
+    await ctx.db.patch(photo._id, { uploaderName: visitorName });
+    await ctx.db.patch(board._id, { lastActivityAt: new Date().toISOString() });
+    await recordOperation(ctx, board._id, opId, photoId, "photo.claim", clientId);
+    return { status: "accepted" as const, photo: await ctx.db.get(photo._id) };
   },
 });
 
@@ -492,6 +547,7 @@ export const createSnapshot = mutation({
         createdAt: photo.createdAt,
         hueVersion: photo.hueVersion,
         timeVersion: photo.timeVersion,
+        uploaderName: photo.uploaderName ?? "",
       });
     }
     return await ctx.db.get(snapshotDocumentId);

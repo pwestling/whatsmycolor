@@ -15,6 +15,12 @@ import {
   displayedXPosition,
   parsePhotoDate,
 } from "./layout.js";
+import {
+  canVisitorMovePhoto,
+  normalizeVisitorName,
+  validVisitorName,
+  visitorNameStorageKey,
+} from "./identity.js";
 import { jpegCaptureDate, localIsoDate, prepareUploadFile } from "./upload.js";
 
 const body = document.body;
@@ -60,7 +66,10 @@ const elements = {
   dialogImage: document.querySelector("#dialog-image"),
   dialogDate: document.querySelector("#dialog-date"),
   dialogPosition: document.querySelector("#dialog-position"),
+  positionControl: document.querySelector("#position-control"),
   dialogTimeSource: document.querySelector("#dialog-time-source"),
+  dialogAttribution: document.querySelector("#dialog-attribution"),
+  claimButton: document.querySelector("#claim-photo"),
   saveButton: document.querySelector("#save-button"),
   removeButton: document.querySelector("#remove-photo"),
   exportButton: document.querySelector("#export-board"),
@@ -69,8 +78,16 @@ const elements = {
   shareLink: document.querySelector("#share-link"),
   openShare: document.querySelector("#open-share"),
   copyShare: document.querySelector("#copy-share"),
+  visitorNameButton: document.querySelector("#visitor-name-button"),
+  nameDialog: document.querySelector("#name-dialog"),
+  nameForm: document.querySelector("#name-form"),
+  nameInput: document.querySelector("#visitor-name-input"),
+  nameDialogClose: document.querySelector("#name-dialog-close"),
   toast: document.querySelector("#toast"),
 };
+
+const nameStorageKey = visitorNameStorageKey(boardSlug);
+const savedVisitorName = normalizeVisitorName(localStorage.getItem(nameStorageKey));
 
 const state = {
   boardExists: null,
@@ -84,6 +101,7 @@ const state = {
   zoom: 1,
   baseFieldWidth: null,
   toastTimer: null,
+  visitorName: !readonly && validVisitorName(savedVisitorName) ? savedVisitorName : "",
 };
 
 function newPublicId() {
@@ -106,11 +124,16 @@ function normalizePhoto(photo) {
   return {
     ...photo,
     id: photo.photoId ?? photo.id,
+    uploaderName: photo.uploaderName ?? "",
   };
 }
 
 function canonicalPhoto(photoId) {
   return state.canonicalPhotos.get(photoId) ?? null;
+}
+
+function canMovePhoto(photo) {
+  return !readonly && canVisitorMovePhoto(photo, state.visitorName);
 }
 
 function displayPhoto(photo) {
@@ -139,6 +162,39 @@ function showToast(message) {
   state.toastTimer = window.setTimeout(() => {
     elements.toast.hidden = true;
   }, 3200);
+}
+
+function updateVisitorNameUi() {
+  if (readonly) return;
+  elements.visitorNameButton.textContent = state.visitorName || "Name";
+  elements.visitorNameButton.title = state.visitorName || "Set name";
+}
+
+function showNameDialog() {
+  if (readonly || elements.nameDialog.open) return;
+  elements.nameInput.value = state.visitorName;
+  elements.nameInput.setCustomValidity("");
+  elements.nameDialogClose.hidden = !state.visitorName;
+  elements.nameDialog.showModal();
+  window.requestAnimationFrame(() => elements.nameInput.focus());
+}
+
+function saveVisitorName(event) {
+  event.preventDefault();
+  const visitorName = normalizeVisitorName(elements.nameInput.value);
+  if (!validVisitorName(visitorName)) {
+    elements.nameInput.setCustomValidity("Choose a name up to 40 characters.");
+    elements.nameInput.reportValidity();
+    return;
+  }
+  elements.nameInput.setCustomValidity("");
+  localStorage.setItem(nameStorageKey, visitorName);
+  state.visitorName = visitorName;
+  updateVisitorNameUi();
+  elements.nameDialog.close();
+  const activePhoto = canonicalPhoto(state.activeId);
+  if (activePhoto) updatePhotoOwnership(activePhoto);
+  renderTimeline();
 }
 
 function setConnection(status) {
@@ -219,9 +275,11 @@ function createCard(photoId) {
 function updateCard(card, photo, xPercent, y) {
   const image = card.querySelector("img");
   if (image.getAttribute("src") !== photo.imageUrl) image.src = photo.imageUrl;
+  const movable = canMovePhoto(photo);
+  card.classList.toggle("movable", movable);
   card.setAttribute(
     "aria-label",
-    `${photo.title}, ${formatCardDate(photo.capturedAt)}${readonly ? "" : ". Drag sideways to change color."}`,
+    `${photo.title}, ${formatCardDate(photo.capturedAt)}${movable ? ". Drag sideways to change color." : ""}`,
   );
   card.style.setProperty("--x", `${xPercent}%`);
   card.style.setProperty("--y", `${y * state.zoom}px`);
@@ -324,6 +382,7 @@ async function flushMove(photoId, control) {
       control.queuedPosition = null;
       const photo = canonicalPhoto(photoId);
       if (!photo) throw new Error("Photo not found.");
+      if (!canMovePhoto(photo)) throw new Error("This photo belongs to someone else.");
       const result = await convex.mutation(communityApi.movePhoto, {
         slug: boardSlug,
         photoId,
@@ -331,6 +390,7 @@ async function flushMove(photoId, control) {
         baseVersion: photo.hueVersion,
         opId: newPublicId(),
         clientId: anonymousClientId,
+        visitorName: state.visitorName,
       });
       replaceCanonicalPhoto(result.photo);
       if (result.status === "stale" && control.queuedPosition === null) {
@@ -348,7 +408,7 @@ async function flushMove(photoId, control) {
 }
 
 function movePhoto(photoId, position) {
-  if (readonly) return Promise.resolve();
+  if (!canMovePhoto(canonicalPhoto(photoId))) return Promise.resolve();
   let control = state.moveControls.get(photoId);
   if (!control) {
     control = { running: false, queuedPosition: null, promise: null };
@@ -372,7 +432,7 @@ function bindCardInteractions(card, photoId) {
   let suppressClick = false;
 
   card.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || !canMovePhoto(canonicalPhoto(photoId))) return;
     pointerId = event.pointerId;
     startX = event.clientX;
     moved = false;
@@ -425,12 +485,23 @@ function bindCardInteractions(card, photoId) {
 
   card.addEventListener("keydown", (event) => {
     if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
-    event.preventDefault();
     const photo = canonicalPhoto(photoId);
-    if (!photo) return;
+    if (!canMovePhoto(photo)) return;
+    event.preventDefault();
     const change = event.key === "ArrowLeft" ? -0.5 : 0.5;
     void movePhoto(photoId, photo.xPosition + change);
   });
+}
+
+function updatePhotoOwnership(photo) {
+  const uploaderName = photo.uploaderName ?? "";
+  elements.dialogAttribution.textContent = uploaderName
+    ? `Added by ${uploaderName}`
+    : "Unclaimed";
+  elements.claimButton.hidden = Boolean(uploaderName);
+  const movable = canMovePhoto(photo);
+  elements.dialogPosition.disabled = !movable;
+  elements.positionControl.classList.toggle("locked", !movable);
 }
 
 function openPhotoDialog(photoId) {
@@ -443,7 +514,39 @@ function openPhotoDialog(photoId) {
   elements.dialogDate.value = photo.capturedAt.slice(0, 16);
   elements.dialogPosition.value = String(photo.xPosition);
   elements.dialogTimeSource.textContent = photo.timeSource;
+  updatePhotoOwnership(photo);
   elements.dialog.showModal();
+}
+
+async function claimActivePhoto() {
+  const photo = canonicalPhoto(state.activeId);
+  if (!photo) return;
+  if (!state.visitorName) {
+    showNameDialog();
+    return;
+  }
+  elements.claimButton.disabled = true;
+  elements.claimButton.textContent = "Claiming…";
+  try {
+    const result = await convex.mutation(communityApi.claimPhoto, {
+      slug: boardSlug,
+      photoId: photo.id,
+      visitorName: state.visitorName,
+      opId: newPublicId(),
+      clientId: anonymousClientId,
+    });
+    replaceCanonicalPhoto(result.photo);
+    updatePhotoOwnership(normalizePhoto(result.photo));
+    renderTimeline();
+    showToast(result.status === "taken"
+      ? `Claimed by ${result.photo.uploaderName}.`
+      : "Claimed.");
+  } catch (error) {
+    showToast(errorMessage(error));
+  } finally {
+    elements.claimButton.disabled = false;
+    elements.claimButton.textContent = "Claim";
+  }
 }
 
 async function savePhotoDetails(event) {
@@ -470,7 +573,11 @@ async function savePhotoDetails(event) {
       if (result.status === "stale") showToast("That date changed elsewhere.");
     }
     const current = canonicalPhoto(photo.id);
-    if (current && Math.abs(desiredPosition - current.xPosition) >= 0.001) {
+    if (
+      current
+      && canMovePhoto(current)
+      && Math.abs(desiredPosition - current.xPosition) >= 0.001
+    ) {
       await movePhoto(photo.id, desiredPosition);
     }
     elements.dialog.close();
@@ -544,12 +651,17 @@ async function addAnalyzedPhoto(photo) {
     width: photo.width,
     height: photo.height,
     createdAt: photo.createdAt,
+    uploaderName: state.visitorName,
   });
   replaceCanonicalPhoto(result.photo);
 }
 
 async function uploadFiles(fileList) {
   if (readonly || !state.boardExists) return;
+  if (!state.visitorName) {
+    showNameDialog();
+    return;
+  }
   const files = [...fileList].filter((file) => (
     file.type.startsWith("image/") || /\.(heic|heif)$/i.test(file.name)
   ));
@@ -764,8 +876,13 @@ function receiveBoard(result) {
   if (!readonly && state.activeId && !state.canonicalPhotos.has(state.activeId)) {
     elements.dialog.close();
   }
+  if (!readonly && state.activeId) {
+    const activePhoto = canonicalPhoto(state.activeId);
+    if (activePhoto) updatePhotoOwnership(activePhoto);
+  }
   setConnection("live");
   renderTimeline();
+  if (!readonly && !state.visitorName) showNameDialog();
 }
 
 function subscribe() {
@@ -789,12 +906,14 @@ if (readonly) {
     element.hidden = true;
   });
   elements.dialog.remove();
+  elements.nameDialog.remove();
   elements.uploadTray.remove();
 }
 
 const convex = convexUrl ? new ConvexClient(convexUrl, { unsavedChangesWarning: false }) : null;
 setConnection(navigator.onLine ? "connecting" : "offline");
 const unsubscribe = subscribe();
+updateVisitorNameUi();
 
 elements.timelineDirection.addEventListener("click", () => {
   state.newestFirst = !state.newestFirst;
@@ -808,11 +927,21 @@ elements.exportButton.addEventListener("click", exportBoard);
 if (!readonly) {
   elements.dialogForm.addEventListener("submit", savePhotoDetails);
   elements.removeButton.addEventListener("click", removeActivePhoto);
+  elements.claimButton.addEventListener("click", claimActivePhoto);
   elements.dialog.addEventListener("close", () => {
     state.activeId = null;
     elements.dialogImage.removeAttribute("src");
   });
   elements.shareButton.addEventListener("click", createShare);
+  elements.visitorNameButton.addEventListener("click", showNameDialog);
+  elements.nameForm.addEventListener("submit", saveVisitorName);
+  elements.nameInput.addEventListener("input", () => {
+    elements.nameInput.setCustomValidity("");
+  });
+  elements.nameDialogClose.addEventListener("click", () => elements.nameDialog.close());
+  elements.nameDialog.addEventListener("cancel", (event) => {
+    if (!state.visitorName) event.preventDefault();
+  });
   elements.copyShare.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(elements.shareLink.value);
@@ -831,6 +960,18 @@ if (!readonly) {
     elements.uploadTray.hidden = true;
   });
 }
+
+window.addEventListener("storage", (event) => {
+  if (readonly || event.key !== nameStorageKey) return;
+  const visitorName = normalizeVisitorName(event.newValue);
+  state.visitorName = validVisitorName(visitorName) ? visitorName : "";
+  updateVisitorNameUi();
+  if (state.visitorName && elements.nameDialog.open) elements.nameDialog.close();
+  const activePhoto = canonicalPhoto(state.activeId);
+  if (activePhoto) updatePhotoOwnership(activePhoto);
+  renderTimeline();
+  if (!state.visitorName && state.boardExists) showNameDialog();
+});
 
 elements.atlasScroll.addEventListener("wheel", (event) => {
   event.preventDefault();

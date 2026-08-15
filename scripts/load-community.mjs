@@ -68,7 +68,19 @@ try {
   const board = latestBoards[0];
   assert(board, `Board ${slug} was not found.`);
   assert(board.photos.length > 0, `Board ${slug} needs one test photo.`);
-  const photo = board.photos[0];
+  let photo = board.photos[0];
+  const visitorName = photo.uploaderName || "Load check";
+  if (!photo.uploaderName) {
+    const claimed = await clients[0].mutation(api.claimPhoto, {
+      slug,
+      photoId: photo.photoId,
+      visitorName,
+      opId: crypto.randomUUID().replaceAll("-", ""),
+      clientId: crypto.randomUUID().replaceAll("-", ""),
+    });
+    assert.equal(claimed.status, "accepted");
+    photo = claimed.photo;
+  }
   const expectedVersion = photo.hueVersion + 1;
   for (const resolver of updateResolvers) {
     resolver.photoId = photo.photoId;
@@ -82,6 +94,7 @@ try {
     baseVersion: photo.hueVersion,
     opId: crypto.randomUUID().replaceAll("-", ""),
     clientId: crypto.randomUUID().replaceAll("-", ""),
+    visitorName,
   });
   assert.equal(result.status, "accepted");
   await withTimeout(
