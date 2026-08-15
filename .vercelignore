@@ -1,0 +1,8 @@
+.env*
+.playwright-cli/
+.pytest_cache/
+output/
+data/*
+tests/
+**/__pycache__/
+

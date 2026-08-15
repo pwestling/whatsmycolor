@@ -1,0 +1,30 @@
+[project]
+name = "whatsmycolor"
+version = "0.1.0"
+description = "Arrange miniature photography by color and time."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pillow>=12.1.0",
+    "pillow-heif>=1.1.0",
+    "psycopg[binary]>=3.2.9",
+    "python-fasthtml==0.14.11",
+    "python-multipart>=0.0.20",
+    "vercel>=0.5.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]
+
+[tool.uv]
+package = false
+
+[tool.vercel]
+entrypoint = "main:app"

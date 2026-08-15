@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#111412">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Shared models</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/static/styles.css?v=__STATIC_VERSION__">
+    <script src="/static/share.js?v=__STATIC_VERSION__" defer></script>
+  </head>
+  <body>
+    <main>
+      <h1 class="visually-hidden">Shared models by color and time</h1>
+
+      <section class="atlas-section" aria-label="Shared model color timeline">
+        <div class="atlas-toolbar">
+          <div>
+            <p class="atlas-title">Shared</p>
+            <p id="range-readout" class="range-readout">Loading…</p>
+          </div>
+          <div class="toolbar-actions">
+            <button class="icon-button timeline-direction-button" id="timeline-direction" type="button" aria-label="Show oldest first" title="Show oldest first">↓</button>
+            <div class="zoom-controls" aria-label="Zoom controls">
+              <button class="icon-button" id="zoom-out" type="button" aria-label="Zoom out">−</button>
+              <button class="text-button" id="zoom-fit" type="button">Fit</button>
+              <button class="icon-button" id="zoom-in" type="button" aria-label="Zoom in">+</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="atlas-scroll" id="atlas-scroll">
+          <div class="atlas" id="atlas">
+            <div class="color-axis" aria-label="Primary color axis">
+              <span class="axis-corner">Color →</span>
+              <div class="color-scale" aria-hidden="true">
+                <span style="--segment:#ff4236"></span>
+                <span style="--segment:#ff2d76"></span>
+                <span style="--segment:#c737df"></span>
+                <span style="--segment:#6947df"></span>
+                <span style="--segment:#315cda"></span>
+                <span style="--segment:#16a9de"></span>
+                <span style="--segment:#14a79b"></span>
+                <span style="--segment:#18a65c"></span>
+                <span style="--segment:#8cc744"></span>
+                <span style="--segment:#f2dc2d"></span>
+                <span style="--segment:#fa9a2a"></span>
+                <span style="--segment:#eee9df"></span>
+                <span style="--segment:#121412"></span>
+              </div>
+            </div>
+
+            <div class="timeline-body" id="timeline-body">
+              <aside class="time-axis" aria-label="Chronological direction">
+                <span class="time-direction" id="time-direction-top">Newer</span>
+                <span class="time-direction older" id="time-direction-bottom">Older</span>
+              </aside>
+              <div class="photo-field" id="photo-field"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+  </body>
+</html>

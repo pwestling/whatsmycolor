@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#111412">
+    <meta name="description" content="Arrange miniature photography by color and time.">
+    <meta property="og:title" content="What's My Color?">
+    <meta property="og:description" content="A chronological color atlas for your painted models.">
+    <title>What's My Color?</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/static/styles.css?v=__STATIC_VERSION__">
+    <script src="/static/app.js?v=__STATIC_VERSION__" defer></script>
+  </head>
+  <body>
+    <input id="photo-input" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif,.heic,.heif" multiple hidden>
+
+    <main>
+      <h1 class="visually-hidden">Models by color and time</h1>
+
+      <section class="atlas-section" aria-label="Model color timeline">
+        <div class="atlas-toolbar">
+          <div>
+            <p class="atlas-title">Models</p>
+            <p id="range-readout" class="range-readout">No photos</p>
+          </div>
+          <div class="toolbar-actions">
+            <button class="icon-button timeline-direction-button" id="timeline-direction" type="button" aria-label="Show oldest first" title="Show oldest first">↓</button>
+            <div class="zoom-controls" aria-label="Zoom controls">
+              <button class="icon-button" id="zoom-out" type="button" aria-label="Zoom out">−</button>
+              <button class="text-button" id="zoom-fit" type="button">Fit</button>
+              <button class="icon-button" id="zoom-in" type="button" aria-label="Zoom in">+</button>
+            </div>
+            <button class="text-button" id="export-board" type="button">Export</button>
+            <button class="text-button" id="share-board" type="button">Share</button>
+            <button class="text-button" id="toolbar-upload" type="button">Add photos</button>
+          </div>
+        </div>
+
+        <div class="atlas-scroll" id="atlas-scroll">
+          <div class="atlas" id="atlas">
+            <div class="color-axis" aria-label="Primary color axis">
+              <span class="axis-corner">Color →</span>
+              <div class="color-scale" aria-hidden="true">
+                <span style="--segment:#ff4236"></span>
+                <span style="--segment:#ff2d76"></span>
+                <span style="--segment:#c737df"></span>
+                <span style="--segment:#6947df"></span>
+                <span style="--segment:#315cda"></span>
+                <span style="--segment:#16a9de"></span>
+                <span style="--segment:#14a79b"></span>
+                <span style="--segment:#18a65c"></span>
+                <span style="--segment:#8cc744"></span>
+                <span style="--segment:#f2dc2d"></span>
+                <span style="--segment:#fa9a2a"></span>
+                <span style="--segment:#eee9df"></span>
+                <span style="--segment:#121412"></span>
+              </div>
+            </div>
+
+            <div class="timeline-body" id="timeline-body">
+              <aside class="time-axis" aria-label="Chronological direction">
+                <span class="time-direction" id="time-direction-top">Newer</span>
+                <span class="time-direction older" id="time-direction-bottom">Older</span>
+              </aside>
+              <div class="photo-field" id="photo-field">
+                <div class="hue-guide" id="hue-guide" hidden>
+                  <span id="hue-guide-label">Blue</span>
+                </div>
+                <div class="empty-state" id="empty-state">
+                  <h2>Add photos</h2>
+                  <p>Date and primary color are filled in automatically.</p>
+                  <button class="upload-button large" id="empty-upload" type="button">Choose photos</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="upload-tray" id="upload-tray" hidden aria-live="polite">
+      <div class="upload-tray-head">
+        <div>
+          <p class="tray-label">Uploading</p>
+          <strong id="upload-summary">Preparing photos…</strong>
+        </div>
+        <button id="upload-tray-close" class="icon-button" type="button" aria-label="Hide upload progress">×</button>
+      </div>
+      <div class="upload-progress"><i id="upload-progress-bar"></i></div>
+      <ol id="upload-list"></ol>
+    </div>
+
+    <dialog class="photo-dialog" id="photo-dialog">
+      <form method="dialog" class="dialog-shell" id="photo-form">
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+        <div class="dialog-image-wrap">
+          <img id="dialog-image" alt="">
+          <span class="dialog-color-dot" id="dialog-color-dot"></span>
+        </div>
+        <div class="dialog-content">
+          <h2>Details</h2>
+          <label>
+            <span>Name</span>
+            <input id="dialog-title" name="title" maxlength="90" required>
+          </label>
+          <label>
+            <span>Date</span>
+            <input id="dialog-date" name="capturedAt" type="datetime-local" required>
+            <small id="dialog-time-source"></small>
+          </label>
+          <label class="position-control">
+            <span>Primary color</span>
+            <input id="dialog-position" name="xPosition" type="range" min="0" max="100" step="0.1">
+            <span class="mini-spectrum" aria-hidden="true"></span>
+            <small id="dialog-color-source"></small>
+          </label>
+          <div class="dialog-actions">
+            <button class="delete-button" id="delete-button" type="button">Delete photo</button>
+            <button class="save-button" id="save-button" value="default">Save changes</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="share-dialog" id="share-dialog">
+      <form method="dialog" class="share-dialog-shell">
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+        <p class="atlas-title">Share</p>
+        <h2>Snapshot ready</h2>
+        <p>This version will not change when you edit the board.</p>
+        <label for="share-link">Link</label>
+        <input id="share-link" type="text" readonly>
+        <div class="share-dialog-actions">
+          <a class="text-button" id="open-share" href="#" target="_blank" rel="noopener">Open</a>
+          <button class="save-button" id="copy-share" type="button">Copy link</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+  </body>
+</html>
