@@ -6,7 +6,7 @@ import sqlite3
 import psycopg
 from psycopg.rows import dict_row
 
-from whatsmycolor.models import BoardShare, Photo
+from whatsmycolor.models import BoardShare, CommunityMedia, Photo
 
 
 SQLITE_SCHEMA = """
@@ -60,6 +60,17 @@ CREATE TABLE IF NOT EXISTS share_photos (
 );
 CREATE INDEX IF NOT EXISTS share_photos_storage_idx
 ON share_photos(storage_key);
+CREATE TABLE IF NOT EXISTS community_media (
+    photo_id TEXT PRIMARY KEY,
+    board_slug TEXT NOT NULL,
+    image_url TEXT NOT NULL,
+    storage_key TEXT NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS community_media_board_idx
+ON community_media(board_slug, created_at DESC);
 """
 
 POSTGRES_SCHEMA = """
@@ -113,6 +124,17 @@ CREATE TABLE IF NOT EXISTS share_photos (
 );
 CREATE INDEX IF NOT EXISTS share_photos_storage_idx
 ON share_photos(storage_key);
+CREATE TABLE IF NOT EXISTS community_media (
+    photo_id TEXT PRIMARY KEY,
+    board_slug TEXT NOT NULL,
+    image_url TEXT NOT NULL,
+    storage_key TEXT NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS community_media_board_idx
+ON community_media(board_slug, created_at DESC);
 """
 
 PHOTO_COLUMNS = (
@@ -150,6 +172,19 @@ def _share_from_row(row: object) -> BoardShare:
         id=str(values["id"]),
         owner_id=str(values["owner_id"]),
         newest_first=bool(values["newest_first"]),
+        created_at=str(values["created_at"]),
+    )
+
+
+def _community_media_from_row(row: object) -> CommunityMedia:
+    values = dict(row)
+    return CommunityMedia(
+        photo_id=str(values["photo_id"]),
+        board_slug=str(values["board_slug"]),
+        image_url=str(values["image_url"]),
+        storage_key=str(values["storage_key"]),
+        width=int(values["width"]),
+        height=int(values["height"]),
         created_at=str(values["created_at"]),
     )
 
@@ -481,3 +516,61 @@ class PhotoRepository:
                     (storage_key,),
                 ).fetchone()
         return row is not None
+
+    def insert_community_media(self, media: CommunityMedia) -> None:
+        values = (
+            media.photo_id,
+            media.board_slug,
+            media.image_url,
+            media.storage_key,
+            media.width,
+            media.height,
+            media.created_at,
+        )
+        with self._connection() as connection:
+            if self.is_postgres:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        INSERT INTO community_media (
+                            photo_id, board_slug, image_url, storage_key,
+                            width, height, created_at
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (photo_id) DO NOTHING
+                        """,
+                        values,
+                    )
+            else:
+                connection.execute(
+                    """
+                    INSERT OR IGNORE INTO community_media (
+                        photo_id, board_slug, image_url, storage_key,
+                        width, height, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    values,
+                )
+
+    def get_community_media(self, photo_id: str) -> CommunityMedia | None:
+        with self._connection() as connection:
+            if self.is_postgres:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT photo_id, board_slug, image_url, storage_key,
+                               width, height, created_at
+                        FROM community_media WHERE photo_id = %s
+                        """,
+                        (photo_id,),
+                    )
+                    row = cursor.fetchone()
+            else:
+                row = connection.execute(
+                    """
+                    SELECT photo_id, board_slug, image_url, storage_key,
+                           width, height, created_at
+                    FROM community_media WHERE photo_id = ?
+                    """,
+                    (photo_id,),
+                ).fetchone()
+        return _community_media_from_row(row) if row is not None else None

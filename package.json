@@ -1,0 +1,22 @@
+{
+  "name": "whatsmycolor-community",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:community": "bun build ./frontend/community.js --outfile ./static/community.js --target browser --minify",
+    "convex:dev": "convex dev",
+    "convex:deploy": "convex deploy",
+    "community:create": "convex run community:createBoard",
+    "test:js": "bun test frontend/tests",
+    "test:convex": "bun ./scripts/verify-convex.mjs",
+    "test:load": "bun ./scripts/load-community.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "convex": "^1.34.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^5.9.2"
+  }
+}

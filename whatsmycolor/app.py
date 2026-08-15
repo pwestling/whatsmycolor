@@ -8,16 +8,19 @@ import os
 from pathlib import Path
 import re
 from secrets import token_urlsafe
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode, urlparse
+from urllib.request import urlopen
 from uuid import uuid4
 
 from fasthtml.common import fast_app
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.staticfiles import StaticFiles
 
 from whatsmycolor.analysis import InvalidImageError, analyze_image
-from whatsmycolor.models import BoardShare, Photo
+from whatsmycolor.models import BoardShare, CommunityMedia, Photo
 from whatsmycolor.repository import PhotoRepository
 from whatsmycolor.social_preview import (
     PreviewPhoto,
@@ -32,6 +35,8 @@ STATIC_DIR = ROOT_DIR / "static"
 OWNER_COOKIE = "wmc_library"
 OWNER_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{32,64}$")
 SHARE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{20,32}$")
+BOARD_SLUG_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
+COMMUNITY_PHOTO_ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
 MAX_TITLE_LENGTH = 90
 MAX_LIBRARY_SIZE = 1_500
 repository = PhotoRepository()
@@ -41,7 +46,7 @@ storage = PhotoStorage()
 
 def _static_version() -> str:
     digest = sha256()
-    for filename in ("styles.css", "app.js", "share.js"):
+    for filename in ("styles.css", "app.js", "share.js", "community.js"):
         path = STATIC_DIR / filename
         if path.exists():
             digest.update(path.read_bytes())
@@ -77,6 +82,126 @@ def _share_page_html(share_url: str, preview_url: str, summary: str) -> str:
         page.replace("__STATIC_VERSION__", _static_version())
         .replace("__SOCIAL_META__", social_meta)
     )
+
+
+def _community_page_html(
+    slug: str,
+    *,
+    snapshot_id: str = "",
+    social_meta: str = "",
+) -> str:
+    page = (STATIC_DIR / "community.html").read_text()
+    readonly = bool(snapshot_id)
+    title = "Shared community models" if readonly else slug
+    return (
+        page.replace("__STATIC_VERSION__", _static_version())
+        .replace("__CONVEX_URL__", escape(os.environ.get("CONVEX_URL", ""), quote=True))
+        .replace("__BOARD_SLUG__", escape(slug, quote=True))
+        .replace("__SNAPSHOT_ID__", escape(snapshot_id, quote=True))
+        .replace("__READONLY__", "true" if readonly else "false")
+        .replace("__PAGE_TITLE__", escape(title, quote=True))
+        .replace("__SOCIAL_META__", social_meta)
+    )
+
+
+def _community_csp() -> str:
+    connect_sources = ["'self'"]
+    convex_url = os.environ.get("CONVEX_URL", "").strip()
+    parsed = urlparse(convex_url)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        connect_sources.append(f"{parsed.scheme}://{parsed.netloc}")
+        socket_scheme = "wss" if parsed.scheme == "https" else "ws"
+        connect_sources.append(f"{socket_scheme}://{parsed.netloc}")
+    return (
+        "default-src 'self'; img-src 'self' data: blob:; "
+        "style-src 'self' 'unsafe-inline'; script-src 'self'; "
+        f"connect-src {' '.join(connect_sources)}; "
+        "frame-ancestors 'none'; base-uri 'self'"
+    )
+
+
+def _community_headers(cache_control: str = "private, no-store") -> dict[str, str]:
+    return {
+        "Cache-Control": cache_control,
+        "Content-Security-Policy": _community_csp(),
+        "Referrer-Policy": "no-referrer",
+        "X-Content-Type-Options": "nosniff",
+    }
+
+
+def _community_snapshot_payload(
+    slug: str,
+    snapshot_id: str,
+) -> dict[str, object] | None:
+    site_url = os.environ.get("CONVEX_SITE_URL", "").strip().rstrip("/")
+    if not site_url:
+        return None
+    query = urlencode({"slug": slug, "snapshotId": snapshot_id})
+    try:
+        with urlopen(
+            f"{site_url}/community/snapshot?{query}",
+            timeout=8,
+        ) as response:
+            payload = json.loads(response.read())
+    except HTTPError as error:
+        if error.code == 404:
+            return None
+        raise
+    except URLError as error:
+        raise RuntimeError("Community snapshot service is unavailable.") from error
+    return payload if isinstance(payload, dict) else None
+
+
+def _community_board_exists(slug: str) -> bool:
+    site_url = os.environ.get("CONVEX_SITE_URL", "").strip().rstrip("/")
+    if not site_url:
+        raise RuntimeError("Community board service is unavailable.")
+    query = urlencode({"slug": slug})
+    try:
+        with urlopen(
+            f"{site_url}/community/board-exists?{query}",
+            timeout=8,
+        ) as response:
+            payload = json.loads(response.read())
+    except (HTTPError, URLError) as error:
+        raise RuntimeError("Community board service is unavailable.") from error
+    return isinstance(payload, dict) and payload.get("exists") is True
+
+
+def _community_snapshot_photos(payload: dict[str, object]) -> list[Photo]:
+    raw_photos = payload.get("photos")
+    if not isinstance(raw_photos, list):
+        return []
+    photos: list[Photo] = []
+    for raw_photo in raw_photos:
+        if not isinstance(raw_photo, dict):
+            continue
+        photo_id = str(raw_photo.get("photoId", ""))
+        media = repository.get_community_media(photo_id)
+        if media is None:
+            continue
+        hue_value = raw_photo.get("hue")
+        photos.append(
+            Photo(
+                id=photo_id,
+                owner_id=f"community:{media.board_slug}",
+                title=str(raw_photo.get("title", "Untitled model")),
+                captured_at=str(raw_photo.get("capturedAt", media.created_at)),
+                time_source=str(raw_photo.get("timeSource", "upload time")),
+                x_position=float(raw_photo.get("xPosition", 0)),
+                hue=float(hue_value) if isinstance(hue_value, (int, float)) else None,
+                color_kind=str(raw_photo.get("colorKind", "hue")),
+                primary_color=str(raw_photo.get("primaryColor", "#777777")),
+                color_source=str(raw_photo.get("colorSource", "automatic guess")),
+                image_url=media.image_url,
+                storage_key=media.storage_key,
+                original_filename=str(raw_photo.get("originalFilename", "photo")),
+                width=media.width,
+                height=media.height,
+                created_at=str(raw_photo.get("createdAt", media.created_at)),
+            )
+        )
+    return photos
 
 
 def _new_owner() -> tuple[str, str]:
@@ -183,6 +308,233 @@ async def home(request: Request):
     if owner_token is not None:
         _set_owner_cookie(response, owner_token, request)
     return response
+
+
+@rt("/community", methods=["GET"])
+async def community_index():
+    page = (STATIC_DIR / "community-home.html").read_text()
+    return HTMLResponse(
+        page.replace("__STATIC_VERSION__", _static_version()),
+        headers=_community_headers(),
+    )
+
+
+@rt("/community/open", methods=["GET"])
+async def community_open(request: Request):
+    slug = request.query_params.get("slug", "").strip().lower()
+    if BOARD_SLUG_PATTERN.fullmatch(slug) is None:
+        return RedirectResponse("/community", status_code=303)
+    return RedirectResponse(f"/community/{slug}", status_code=303)
+
+
+@rt("/community/{slug}/s/{snapshot_id}", methods=["GET"])
+async def community_shared_board(slug: str, snapshot_id: str, request: Request):
+    if (
+        BOARD_SLUG_PATTERN.fullmatch(slug) is None
+        or COMMUNITY_PHOTO_ID_PATTERN.fullmatch(snapshot_id) is None
+    ):
+        return Response(status_code=404)
+    description = "A frozen community board."
+    if os.environ.get("CONVEX_SITE_URL"):
+        try:
+            payload = await asyncio.to_thread(
+                _community_snapshot_payload,
+                slug,
+                snapshot_id,
+            )
+        except RuntimeError:
+            payload = None
+        if payload is not None:
+            description = share_summary(_community_snapshot_photos(payload))
+    share_url = str(request.url)
+    preview_url = str(
+        request.url_for(
+            "community_shared_board_preview",
+            slug=slug,
+            snapshot_id=snapshot_id,
+        )
+    )
+    social_meta = "\n    ".join(
+        (
+            '<meta property="og:type" content="website">',
+            '<meta property="og:title" content="Shared community models">',
+            f'<meta property="og:description" content="{escape(description, quote=True)}">',
+            f'<meta property="og:url" content="{escape(share_url, quote=True)}">',
+            f'<meta property="og:image" content="{escape(preview_url, quote=True)}">',
+            '<meta property="og:image:width" content="1200">',
+            '<meta property="og:image:height" content="630">',
+            '<meta property="og:image:type" content="image/png">',
+            '<meta name="twitter:card" content="summary_large_image">',
+            f'<meta name="twitter:image" content="{escape(preview_url, quote=True)}">',
+            f'<link rel="canonical" href="{escape(share_url, quote=True)}">',
+        )
+    )
+    return HTMLResponse(
+        _community_page_html(
+            slug,
+            snapshot_id=snapshot_id,
+            social_meta=social_meta,
+        ),
+        headers=_community_headers("public, max-age=300"),
+    )
+
+
+@rt("/community/{slug}", methods=["GET"])
+async def community_board(slug: str):
+    if BOARD_SLUG_PATTERN.fullmatch(slug) is None:
+        return Response(status_code=404)
+    return HTMLResponse(
+        _community_page_html(slug),
+        headers=_community_headers(),
+    )
+
+
+@rt("/api/community/{slug}/photos", methods=["POST"])
+async def upload_community_photo(slug: str, request: Request):
+    if BOARD_SLUG_PATTERN.fullmatch(slug) is None:
+        return _api_error("Board not found.", 404)
+    try:
+        board_exists = await asyncio.to_thread(_community_board_exists, slug)
+    except RuntimeError as error:
+        return _api_error(str(error), 503)
+    if not board_exists:
+        return _api_error("Board not found.", 404)
+    form = await request.form()
+    photo_id = _form_text(form.get("photo_id"))
+    if photo_id is None or COMMUNITY_PHOTO_ID_PATTERN.fullmatch(photo_id) is None:
+        return _api_error("Could not reserve that photo.", 422)
+    if repository.get_community_media(photo_id) is not None:
+        return _api_error("This upload was already processed.", 409)
+    upload = form.get("photo")
+    if not isinstance(upload, UploadFile):
+        return _api_error("Choose a photo to upload.", 400)
+    source_bytes = await upload.read()
+    original_filename = upload.filename or "photo"
+    try:
+        analysis = analyze_image(
+            source_bytes,
+            original_filename,
+            captured_at_hint=_form_text(form.get("captured_at_hint")),
+            last_modified_hint=_form_text(form.get("last_modified")),
+        )
+    except InvalidImageError as error:
+        return _api_error(str(error), 422)
+
+    try:
+        stored = await storage.put_community(slug, photo_id, analysis.image_bytes)
+    except RuntimeError as error:
+        return _api_error(str(error), 503)
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    media = CommunityMedia(
+        photo_id=photo_id,
+        board_slug=slug,
+        image_url=stored.url,
+        storage_key=stored.key,
+        width=analysis.width,
+        height=analysis.height,
+        created_at=now,
+    )
+    try:
+        repository.insert_community_media(media)
+    except Exception:
+        await storage.delete(stored.url, stored.key)
+        raise
+
+    return JSONResponse(
+        {
+            "photo": {
+                "id": photo_id,
+                "title": _clean_title(original_filename),
+                "capturedAt": analysis.captured_at,
+                "timeSource": analysis.time_source,
+                "xPosition": analysis.x_position,
+                "hue": analysis.hue,
+                "colorKind": analysis.color_kind,
+                "primaryColor": analysis.primary_color,
+                "colorSource": "automatic guess",
+                "imageUrl": f"/community-media/{photo_id}",
+                "originalFilename": original_filename[:255],
+                "width": analysis.width,
+                "height": analysis.height,
+                "createdAt": now,
+                "hueVersion": 0,
+                "timeVersion": 0,
+            }
+        },
+        status_code=201,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@rt("/community-media/{photo_id}", methods=["GET"])
+async def community_photo_media(photo_id: str):
+    if COMMUNITY_PHOTO_ID_PATTERN.fullmatch(photo_id) is None:
+        return Response(status_code=404)
+    media = repository.get_community_media(photo_id)
+    if media is None:
+        return Response(status_code=404)
+    try:
+        body = await storage.read(media.image_url, media.storage_key)
+    except FileNotFoundError:
+        return Response(status_code=404)
+    return Response(
+        body,
+        media_type="image/webp",
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "CDN-Cache-Control": "public, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@rt("/community-social-preview/{slug}/{snapshot_id}", methods=["GET"])
+async def community_shared_board_preview(slug: str, snapshot_id: str):
+    if (
+        BOARD_SLUG_PATTERN.fullmatch(slug) is None
+        or COMMUNITY_PHOTO_ID_PATTERN.fullmatch(snapshot_id) is None
+    ):
+        return Response(status_code=404)
+    try:
+        payload = await asyncio.to_thread(
+            _community_snapshot_payload,
+            slug,
+            snapshot_id,
+        )
+    except RuntimeError:
+        return Response(status_code=503)
+    if payload is None:
+        return Response(status_code=404)
+    raw_snapshot = payload.get("snapshot")
+    newest_first = (
+        bool(raw_snapshot.get("newestFirst", True))
+        if isinstance(raw_snapshot, dict)
+        else True
+    )
+    photos = _community_snapshot_photos(payload)
+    ordered = sorted(
+        photos,
+        key=lambda photo: (photo.captured_at, photo.created_at, photo.id),
+        reverse=newest_first,
+    )[:36]
+    bodies = await asyncio.gather(
+        *(storage.read(photo.image_url, photo.storage_key) for photo in ordered),
+        return_exceptions=True,
+    )
+    preview_photos = [
+        PreviewPhoto(photo=photo, body=body)
+        for photo, body in zip(ordered, bodies, strict=True)
+        if isinstance(body, bytes)
+    ]
+    return Response(
+        render_social_preview(preview_photos, newest_first),
+        media_type="image/png",
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Content-Disposition": 'inline; filename="community-models.png"',
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @rt("/s/{share_id}", methods=["GET"])

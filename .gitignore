@@ -2,9 +2,11 @@
 .env
 .env.local
 .agents/
+.convex/
 .venv/
 .vercel/
 .playwright-cli/
+node_modules/
 .sesskey
 __pycache__/
 *.py[cod]

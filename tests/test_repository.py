@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from whatsmycolor.models import BoardShare, Photo
+from whatsmycolor.models import BoardShare, CommunityMedia, Photo
 from whatsmycolor.repository import PhotoRepository
 
 
@@ -103,3 +103,22 @@ def test_share_is_an_immutable_photo_snapshot(tmp_path: Path) -> None:
     assert snapshot[0].title == "Model one"
     assert snapshot[0].x_position == 32.0
     assert repository.storage_is_shared(photo.storage_key)
+
+
+def test_community_media_registry_is_public_id_based(tmp_path: Path) -> None:
+    repository = repository_at(tmp_path / "photos.db")
+    media = CommunityMedia(
+        photo_id="a" * 32,
+        board_slug="models",
+        image_url="data/uploads/community.webp",
+        storage_key="community/board/photo.webp",
+        width=640,
+        height=800,
+        created_at="2026-08-15T10:00:00+00:00",
+    )
+
+    repository.insert_community_media(media)
+    stored = repository.get_community_media(media.photo_id)
+
+    assert stored == media
+    assert repository.get_community_media("b" * 32) is None

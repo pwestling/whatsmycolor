@@ -15,10 +15,47 @@ them by primary color (horizontal).
 - Converts uploads to orientation-corrected, metadata-free WebP images.
 - Keeps each library separate with an anonymous, HTTP-only browser cookie.
 
+## Community boards
+
+`/community/<slug>` is the shared-board surface. Everyone with the URL can add
+photos, move any photo, and edit dates. Convex is the canonical metadata store
+and pushes accepted changes to every connected client over its managed realtime
+connection. Photo bytes remain in private Vercel Blob storage and are served by
+the app's media proxy.
+
+Mutations use idempotency keys and per-field versions. Conflicting moves are
+accepted atomically or returned as stale; the client rebases its pending move on
+the newest accepted position. Drag previews stay local and the final position is
+written on release, which keeps message volume low even with many visitors.
+
+Community boards are intentionally not self-created. Create one from an
+authenticated Convex CLI session:
+
+```bash
+bunx convex run community:createBoard '{"slug":"models"}'
+bunx convex run community:createBoard '{"slug":"models"}' --prod
+```
+
+Visitors cannot delete photos. An administrator can hide or restore an upload:
+
+```bash
+bunx convex run community:tombstonePhoto \
+  '{"slug":"models","photoId":"<32-character-photo-id>"}' --prod
+bunx convex run community:restorePhoto \
+  '{"slug":"models","photoId":"<32-character-photo-id>"}' --prod
+```
+
 ## Run locally
 
 ```bash
 uv sync
+bun install
+bunx convex dev
+```
+
+In another terminal:
+
+```bash
 uv run python main.py
 ```
 
@@ -29,6 +66,9 @@ Run the tests with:
 
 ```bash
 uv run pytest
+bun run test:js
+bun run typecheck
+bun run test:convex
 ```
 
 ## Deploy to Vercel
@@ -42,6 +82,16 @@ The setup follows the same Python/FastHTML pattern as Colorslice:
    `BLOB_READ_WRITE_TOKEN` to the project.
 4. Deploy. `api/index.py` is the Vercel ASGI entrypoint; `main.py` runs the app
    locally.
+
+For Community, deploy the Convex functions first and set the production
+deployment's `CONVEX_URL` and `CONVEX_SITE_URL` in Vercel. Build and commit the
+browser bundle before the Python function is packaged.
+
+```bash
+bun run build:community
+bunx convex deploy
+vercel --prod
+```
 
 Without `DATABASE_URL`, local development uses SQLite. A Vercel deployment can
 boot without Postgres, but its `/tmp` SQLite database is ephemeral and should

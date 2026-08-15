@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#111412">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Community</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/static/styles.css?v=__STATIC_VERSION__">
+  </head>
+  <body class="community-index-page">
+    <main class="community-index">
+      <form action="/community/open" method="get">
+        <label for="community-slug">Board</label>
+        <div>
+          <input id="community-slug" name="slug" autocomplete="off" pattern="[a-z0-9][a-z0-9-]{0,47}" required>
+          <button class="save-button" type="submit">Open</button>
+        </div>
+      </form>
+    </main>
+  </body>
+</html>

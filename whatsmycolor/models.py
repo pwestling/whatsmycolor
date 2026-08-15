@@ -62,3 +62,14 @@ class ImageAnalysis:
     color_kind: str
     primary_color: str
     x_position: float
+
+
+@dataclass(frozen=True)
+class CommunityMedia:
+    photo_id: str
+    board_slug: str
+    image_url: str
+    storage_key: str
+    width: int
+    height: int
+    created_at: str

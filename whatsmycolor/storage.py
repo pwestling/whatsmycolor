@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from hashlib import sha256
 import os
 from pathlib import Path
 
@@ -33,6 +34,19 @@ class PhotoStorage:
 
     async def put(self, owner_id: str, photo_id: str, body: bytes) -> StoredImage:
         key = f"libraries/{owner_id[:12]}/{photo_id}.webp"
+        return await self._put(key, body)
+
+    async def put_community(
+        self,
+        board_slug: str,
+        photo_id: str,
+        body: bytes,
+    ) -> StoredImage:
+        board_key = sha256(board_slug.encode()).hexdigest()[:12]
+        key = f"community/{board_key}/{photo_id}.webp"
+        return await self._put(key, body)
+
+    async def _put(self, key: str, body: bytes) -> StoredImage:
         if self.client is not None:
             uploaded = await self.client.put(
                 key,

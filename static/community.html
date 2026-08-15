@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#111412">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="convex-url" content="__CONVEX_URL__">
+    __SOCIAL_META__
+    <title>__PAGE_TITLE__</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/static/styles.css?v=__STATIC_VERSION__">
+    <script type="module" src="/static/community.js?v=__STATIC_VERSION__"></script>
+  </head>
+  <body
+    class="community-page"
+    data-board-slug="__BOARD_SLUG__"
+    data-snapshot-id="__SNAPSHOT_ID__"
+    data-readonly="__READONLY__"
+  >
+    <input id="photo-input" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif,.heic,.heif" multiple hidden>
+
+    <main>
+      <h1 class="visually-hidden">Community models by color and time</h1>
+      <section class="atlas-section" aria-label="Community model color timeline">
+        <div class="atlas-toolbar">
+          <div>
+            <p class="atlas-title"><span id="connection-dot" class="connection-dot" aria-label="Connecting"></span><span id="board-name">__BOARD_SLUG__</span></p>
+            <p id="range-readout" class="range-readout">Loading…</p>
+          </div>
+          <div class="toolbar-actions">
+            <button class="icon-button timeline-direction-button" id="timeline-direction" type="button" aria-label="Show oldest first" title="Show oldest first">↓</button>
+            <div class="zoom-controls" aria-label="Zoom controls">
+              <button class="icon-button" id="zoom-out" type="button" aria-label="Zoom out">−</button>
+              <button class="text-button" id="zoom-fit" type="button">Fit</button>
+              <button class="icon-button" id="zoom-in" type="button" aria-label="Zoom in">+</button>
+            </div>
+            <button class="text-button" id="export-board" type="button">Export</button>
+            <button class="text-button community-edit-control" id="share-board" type="button">Share</button>
+            <button class="text-button community-edit-control" id="toolbar-upload" type="button">Add photos</button>
+          </div>
+        </div>
+
+        <div class="atlas-scroll" id="atlas-scroll">
+          <div class="atlas" id="atlas">
+            <div class="color-axis" aria-label="Primary color axis">
+              <span class="axis-corner">Color →</span>
+              <div class="color-scale" aria-hidden="true">
+                <span style="--segment:#ff4236"></span>
+                <span style="--segment:#ff2d76"></span>
+                <span style="--segment:#c737df"></span>
+                <span style="--segment:#6947df"></span>
+                <span style="--segment:#315cda"></span>
+                <span style="--segment:#16a9de"></span>
+                <span style="--segment:#14a79b"></span>
+                <span style="--segment:#18a65c"></span>
+                <span style="--segment:#8cc744"></span>
+                <span style="--segment:#f2dc2d"></span>
+                <span style="--segment:#fa9a2a"></span>
+                <span style="--segment:#eee9df"></span>
+                <span style="--segment:#121412"></span>
+              </div>
+            </div>
+
+            <div class="timeline-body" id="timeline-body">
+              <aside class="time-axis" aria-label="Chronological direction">
+                <span class="time-direction" id="time-direction-top">Newer</span>
+                <span class="time-direction older" id="time-direction-bottom">Older</span>
+              </aside>
+              <div class="photo-field" id="photo-field">
+                <div class="hue-guide" id="hue-guide" hidden></div>
+                <div class="empty-state" id="empty-state">
+                  <h2 id="empty-title">Loading…</h2>
+                  <button class="upload-button large community-edit-control" id="empty-upload" type="button" hidden>Choose photos</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div class="upload-tray" id="upload-tray" hidden aria-live="polite">
+      <div class="upload-tray-head">
+        <div>
+          <p class="tray-label">Uploading</p>
+          <strong id="upload-summary">Preparing…</strong>
+        </div>
+        <button id="upload-tray-close" class="icon-button" type="button" aria-label="Hide upload progress">×</button>
+      </div>
+      <div class="upload-progress"><i id="upload-progress-bar"></i></div>
+      <ol id="upload-list"></ol>
+    </div>
+
+    <dialog class="photo-dialog" id="photo-dialog">
+      <form method="dialog" class="dialog-shell" id="photo-form">
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+        <div class="dialog-image-wrap"><img id="dialog-image" alt=""></div>
+        <div class="dialog-content">
+          <h2>Details</h2>
+          <label>
+            <span>Date</span>
+            <input id="dialog-date" name="capturedAt" type="datetime-local" required>
+            <small id="dialog-time-source"></small>
+          </label>
+          <label class="position-control">
+            <span>Primary color</span>
+            <input id="dialog-position" name="xPosition" type="range" min="0" max="100" step="0.1">
+            <span class="mini-spectrum" aria-hidden="true"></span>
+          </label>
+          <div class="dialog-actions community-dialog-actions">
+            <button class="save-button" id="save-button" value="default">Save</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="share-dialog" id="share-dialog">
+      <form method="dialog" class="share-dialog-shell">
+        <button class="dialog-close" value="cancel" aria-label="Close">×</button>
+        <p class="atlas-title">Share</p>
+        <h2>Snapshot ready</h2>
+        <label for="share-link">Link</label>
+        <input id="share-link" type="text" readonly>
+        <div class="share-dialog-actions">
+          <a class="text-button" id="open-share" href="#" target="_blank" rel="noopener">Open</a>
+          <button class="save-button" id="copy-share" type="button">Copy</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+  </body>
+</html>

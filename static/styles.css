@@ -103,6 +103,20 @@ main { overflow: hidden; }
   text-transform: uppercase;
 }
 
+.connection-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 7px;
+  background: #788078;
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+
+.connection-dot.live { background: var(--acid); }
+.connection-dot.offline,
+.connection-dot.error { background: #ff756a; }
+
 .range-readout { margin: 0; color: #d6d8d1; font-family: Georgia, serif; font-size: 15px; }
 
 .toolbar-actions,
@@ -461,6 +475,7 @@ main { overflow: hidden; }
 .mini-spectrum { display: block; height: 8px; margin-top: -3px; background: var(--spectrum); border: 1px solid var(--line); border-radius: 99px; }
 
 .dialog-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: auto; padding-top: 20px; border-top: 1px solid var(--line); }
+.community-dialog-actions { justify-content: flex-end; }
 .delete-button { padding: 9px 0; color: #9b3e38; background: transparent; border: 0; font-size: 10px; font-weight: 700; cursor: pointer; }
 .save-button { min-height: 42px; }
 
@@ -481,8 +496,44 @@ main { overflow: hidden; }
 
 .toast[hidden] { display: none; }
 
+.community-index-page {
+  min-height: 100vh;
+  color: var(--cream);
+  background: var(--dark);
+}
+
+.community-index {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+}
+
+.community-index form { width: min(420px, calc(100vw - 40px)); }
+.community-index label {
+  display: block;
+  margin-bottom: 9px;
+  color: #9da39b;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.community-index form > div { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.community-index input {
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 13px;
+  color: var(--cream);
+  background: #1a1e1a;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 999px;
+  outline: none;
+}
+.community-index input:focus { border-color: rgb(227 239 99 / 70%); }
+
 @media (max-width: 900px) {
-  .atlas-toolbar { padding: 0 20px; }
+  .atlas-toolbar { gap: 12px; padding: 0 20px; }
+  .toolbar-actions { gap: 7px; }
   .dialog-shell { grid-template-columns: 1fr; }
   .dialog-image-wrap { min-height: 320px; }
 }
