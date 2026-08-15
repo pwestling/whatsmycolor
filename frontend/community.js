@@ -62,6 +62,7 @@ const elements = {
   dialogPosition: document.querySelector("#dialog-position"),
   dialogTimeSource: document.querySelector("#dialog-time-source"),
   saveButton: document.querySelector("#save-button"),
+  removeButton: document.querySelector("#remove-photo"),
   exportButton: document.querySelector("#export-board"),
   shareButton: document.querySelector("#share-board"),
   shareDialog: document.querySelector("#share-dialog"),
@@ -482,6 +483,33 @@ async function savePhotoDetails(event) {
   }
 }
 
+async function removeActivePhoto() {
+  const photo = canonicalPhoto(state.activeId);
+  if (!photo || !window.confirm("Remove this photo?")) return;
+  elements.removeButton.disabled = true;
+  elements.saveButton.disabled = true;
+  elements.removeButton.textContent = "Removing…";
+  try {
+    const result = await convex.mutation(communityApi.removePhoto, {
+      slug: boardSlug,
+      photoId: photo.id,
+      opId: newPublicId(),
+      clientId: anonymousClientId,
+    });
+    state.pendingPositions.delete(photo.id);
+    state.canonicalPhotos.delete(photo.id);
+    elements.dialog.close();
+    renderTimeline();
+    showToast(result.status === "missing" ? "Already removed." : "Removed.");
+  } catch (error) {
+    showToast(errorMessage(error));
+  } finally {
+    elements.removeButton.disabled = false;
+    elements.saveButton.disabled = false;
+    elements.removeButton.textContent = "Remove";
+  }
+}
+
 async function apiFetch(path, options = {}) {
   const response = await fetch(path, options);
   if (!response.ok) {
@@ -733,6 +761,9 @@ function receiveBoard(result) {
       return [normalized.id, normalized];
     }),
   );
+  if (!readonly && state.activeId && !state.canonicalPhotos.has(state.activeId)) {
+    elements.dialog.close();
+  }
   setConnection("live");
   renderTimeline();
 }
@@ -776,6 +807,7 @@ document.querySelector("#zoom-fit").addEventListener("click", fitTimeline);
 elements.exportButton.addEventListener("click", exportBoard);
 if (!readonly) {
   elements.dialogForm.addEventListener("submit", savePhotoDetails);
+  elements.removeButton.addEventListener("click", removeActivePhoto);
   elements.dialog.addEventListener("close", () => {
     state.activeId = null;
     elements.dialogImage.removeAttribute("src");

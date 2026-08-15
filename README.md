@@ -36,7 +36,9 @@ bunx convex run community:createBoard '{"slug":"models"}'
 bunx convex run community:createBoard '{"slug":"models"}' --prod
 ```
 
-Visitors cannot delete photos. An administrator can hide or restore an upload:
+Visitors can remove photos from the live board. Removal is soft: existing frozen
+snapshots keep the image, and an administrator can restore it. Administrators can
+also hide an upload directly:
 
 ```bash
 bunx convex run community:tombstonePhoto \

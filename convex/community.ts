@@ -370,6 +370,38 @@ export const movePhoto = mutation({
   },
 });
 
+export const removePhoto = mutation({
+  args: {
+    slug: v.string(),
+    photoId: v.string(),
+    opId: v.string(),
+    clientId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const slug = requireSlug(args.slug);
+    const photoId = requirePhotoId(args.photoId);
+    const opId = requirePublicId(args.opId, "Could not remove that photo.");
+    const clientId = requirePublicId(args.clientId, "Could not remove that photo.");
+    const board = await boardBySlug(ctx, slug);
+    if (board === null) throw new ConvexError("Board not found.");
+    const photo = await photoByPublicId(ctx, board._id, photoId);
+    if (await hasOperation(ctx, board._id, opId)) {
+      return { status: "duplicate" as const, photoId };
+    }
+    if (photo === null || !isActivePhoto(photo)) {
+      return { status: "missing" as const, photoId };
+    }
+    const now = new Date().toISOString();
+    await ctx.db.patch(photo._id, { deletedAt: now });
+    await ctx.db.patch(board._id, {
+      photoCount: Math.max(0, board.photoCount - 1),
+      lastActivityAt: now,
+    });
+    await recordOperation(ctx, board._id, opId, photoId, "photo.remove", clientId);
+    return { status: "accepted" as const, photoId };
+  },
+});
+
 export const setPhotoDate = mutation({
   args: {
     slug: v.string(),

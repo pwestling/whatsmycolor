@@ -475,7 +475,7 @@ main { overflow: hidden; }
 .mini-spectrum { display: block; height: 8px; margin-top: -3px; background: var(--spectrum); border: 1px solid var(--line); border-radius: 99px; }
 
 .dialog-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: auto; padding-top: 20px; border-top: 1px solid var(--line); }
-.community-dialog-actions { justify-content: flex-end; }
+.community-dialog-actions { justify-content: space-between; }
 .delete-button { padding: 9px 0; color: #9b3e38; background: transparent; border: 0; font-size: 10px; font-weight: 700; cursor: pointer; }
 .save-button { min-height: 42px; }
 
