@@ -90,5 +90,17 @@ def test_shared_board_stays_frozen_after_edits_and_deletion(tmp_path: Path, monk
         assert snapshot.json()["photos"][0]["xPosition"] != 98
         shared_media = snapshot.json()["photos"][0]["imageUrl"]
         assert client.get(shared_media).status_code == 200
-        assert client.get(share_url).status_code == 200
-        assert "Shared models by color and time" in client.get(share_url).text
+        share_page = client.get(share_url)
+        assert share_page.status_code == 200
+        assert "Shared models by color and time" in share_page.text
+        assert '<meta property="og:title" content="Shared models">' in share_page.text
+        assert 'content="1 model · Apr 2024"' in share_page.text
+        preview_url = f"/social-preview/{share_id}"
+        assert f'content="http://testserver{preview_url}"' in share_page.text
+
+        preview = client.get(preview_url)
+        assert preview.status_code == 200
+        assert preview.headers["content-type"] == "image/png"
+        assert preview.headers["cache-control"].endswith("immutable")
+        with Image.open(BytesIO(preview.content)) as preview_image:
+            assert preview_image.size == (1200, 630)

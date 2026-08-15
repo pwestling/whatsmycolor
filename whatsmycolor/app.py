@@ -1,6 +1,8 @@
+import asyncio
 import colorsys
 from datetime import datetime, timezone
 from hashlib import sha256
+from html import escape
 import json
 import os
 from pathlib import Path
@@ -17,6 +19,11 @@ from starlette.staticfiles import StaticFiles
 from whatsmycolor.analysis import InvalidImageError, analyze_image
 from whatsmycolor.models import BoardShare, Photo
 from whatsmycolor.repository import PhotoRepository
+from whatsmycolor.social_preview import (
+    PreviewPhoto,
+    render_social_preview,
+    share_summary,
+)
 from whatsmycolor.storage import PhotoStorage
 
 
@@ -46,9 +53,30 @@ def _page_html() -> str:
     return page.replace("__STATIC_VERSION__", _static_version())
 
 
-def _share_page_html() -> str:
+def _share_page_html(share_url: str, preview_url: str, summary: str) -> str:
     page = (STATIC_DIR / "share.html").read_text()
-    return page.replace("__STATIC_VERSION__", _static_version())
+    social_meta = "\n    ".join(
+        (
+            '<meta property="og:type" content="website">',
+            '<meta property="og:title" content="Shared models">',
+            f'<meta property="og:description" content="{escape(summary, quote=True)}">',
+            f'<meta property="og:url" content="{escape(share_url, quote=True)}">',
+            f'<meta property="og:image" content="{escape(preview_url, quote=True)}">',
+            '<meta property="og:image:width" content="1200">',
+            '<meta property="og:image:height" content="630">',
+            '<meta property="og:image:type" content="image/png">',
+            '<meta property="og:image:alt" content="Shared model photo board organized by color">',
+            '<meta name="twitter:card" content="summary_large_image">',
+            '<meta name="twitter:title" content="Shared models">',
+            f'<meta name="twitter:description" content="{escape(summary, quote=True)}">',
+            f'<meta name="twitter:image" content="{escape(preview_url, quote=True)}">',
+            f'<link rel="canonical" href="{escape(share_url, quote=True)}">',
+        )
+    )
+    return (
+        page.replace("__STATIC_VERSION__", _static_version())
+        .replace("__SOCIAL_META__", social_meta)
+    )
 
 
 def _new_owner() -> tuple[str, str]:
@@ -155,13 +183,17 @@ async def home(request: Request):
 
 
 @rt("/s/{share_id}", methods=["GET"])
-async def shared_board(share_id: str):
+async def shared_board(share_id: str, request: Request):
     if SHARE_ID_PATTERN.fullmatch(share_id) is None:
         return Response(status_code=404)
-    if repository.get_share(share_id) is None:
+    share = repository.get_share(share_id)
+    if share is None:
         return Response(status_code=404)
+    photos = repository.list_for_share(share_id)
+    share_url = str(request.url)
+    preview_url = str(request.url_for("shared_board_preview", share_id=share_id))
     return HTMLResponse(
-        _share_page_html(),
+        _share_page_html(share_url, preview_url, share_summary(photos)),
         headers={
             "Cache-Control": "public, max-age=300",
             "Content-Security-Policy": (
@@ -170,6 +202,38 @@ async def shared_board(share_id: str):
                 "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'"
             ),
             "Referrer-Policy": "no-referrer",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@rt("/social-preview/{share_id}", methods=["GET"])
+async def shared_board_preview(share_id: str):
+    if SHARE_ID_PATTERN.fullmatch(share_id) is None:
+        return Response(status_code=404)
+    share = repository.get_share(share_id)
+    if share is None:
+        return Response(status_code=404)
+    photos = repository.list_for_share(share_id)
+    preview_source = photos[:36] if share.newest_first else photos[-36:]
+    bodies = await asyncio.gather(
+        *(
+            storage.read(photo.image_url, photo.storage_key)
+            for photo in preview_source
+        ),
+        return_exceptions=True,
+    )
+    preview_photos = [
+        PreviewPhoto(photo=photo, body=body)
+        for photo, body in zip(preview_source, bodies, strict=True)
+        if isinstance(body, bytes)
+    ]
+    return Response(
+        render_social_preview(preview_photos, share.newest_first),
+        media_type="image/png",
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "Content-Disposition": 'inline; filename="shared-models.png"',
             "X-Content-Type-Options": "nosniff",
         },
     )
