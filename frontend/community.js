@@ -62,6 +62,7 @@ const elements = {
   uploadProgressBar: document.querySelector("#upload-progress-bar"),
   uploadList: document.querySelector("#upload-list"),
   dialog: document.querySelector("#photo-dialog"),
+  dialogClose: document.querySelector("#photo-dialog-close"),
   dialogForm: document.querySelector("#photo-form"),
   dialogImage: document.querySelector("#dialog-image"),
   dialogDate: document.querySelector("#dialog-date"),
@@ -512,6 +513,7 @@ function openPhotoDialog(photoId) {
   elements.dialogImage.src = photo.imageUrl;
   elements.dialogImage.alt = photo.title;
   elements.dialogDate.value = photo.capturedAt.slice(0, 16);
+  elements.dialogDate.dataset.initialValue = elements.dialogDate.value;
   elements.dialogPosition.value = String(photo.xPosition);
   elements.dialogTimeSource.textContent = photo.timeSource;
   updatePhotoOwnership(photo);
@@ -556,11 +558,12 @@ async function savePhotoDetails(event) {
   elements.saveButton.disabled = true;
   elements.saveButton.textContent = "Saving…";
   try {
+    const dateChanged = elements.dialogDate.value !== elements.dialogDate.dataset.initialValue;
     const capturedAt = elements.dialogDate.value.length === 16
       ? `${elements.dialogDate.value}:00`
       : elements.dialogDate.value;
     const desiredPosition = Number(elements.dialogPosition.value);
-    if (capturedAt !== photo.capturedAt) {
+    if (dateChanged) {
       const result = await convex.mutation(communityApi.setPhotoDate, {
         slug: boardSlug,
         photoId: photo.id,
@@ -926,6 +929,7 @@ document.querySelector("#zoom-fit").addEventListener("click", fitTimeline);
 elements.exportButton.addEventListener("click", exportBoard);
 if (!readonly) {
   elements.dialogForm.addEventListener("submit", savePhotoDetails);
+  elements.dialogClose.addEventListener("click", () => elements.dialog.close());
   elements.removeButton.addEventListener("click", removeActivePhoto);
   elements.claimButton.addEventListener("click", claimActivePhoto);
   elements.dialog.addEventListener("close", () => {
