@@ -154,7 +154,10 @@ def _manual_color(x_position: float) -> tuple[float | None, str, str]:
     return round(hue, 2), "hue", color
 
 
-app, rt = fast_app(title="What's My Color?")
+app, rt = fast_app(
+    title="What's My Color?",
+    secret_key=os.environ.get("FASTHTML_SECRET_KEY") or token_urlsafe(32),
+)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
